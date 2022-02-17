@@ -297,15 +297,25 @@ def get_datasets(args):
     return train_loader, val_loader
 
 def get_model(args):
-    if args.datasets == 'ImageNet':
-        return models_imagenet.__dict__[args.arch]()
+    
 
     if args.datasets == 'CIFAR10' or args.datasets == 'MNIST':
         num_class = 10
     elif args.datasets == 'CIFAR100':
         num_class = 100
+    else:
+        num_class = 1000
     
-    if args.datasets == 'CIFAR100':
+    if args.pretrained and args.datasets == 'ImageNet':
+        print("USE OFFICIAL")
+            
+        model = models_imagenet.__dict__[args.arch](pretrained=args.pretrained)
+        if num_class < 1000:
+            old_fc = model.fc
+            model.fc = nn.Linear(model.fc.weight.shape[1], num_class, bias=True)
+        return model
+    
+    if args.datasets == 'CIFAR100' or args.datasets == 'CIFAR10':
         if args.arch == 'vgg16':
             from models.vgg import vgg16_bn
             net = vgg16_bn()
@@ -347,13 +357,13 @@ def get_model(args):
             net = xception()
         elif args.arch == 'resnet18':
             from models.resnet import resnet18
-            net = resnet18()
+            net = resnet18(num_classes=num_class)
         elif args.arch == 'resnet34':
             from models.resnet import resnet34
             net = resnet34()
         elif args.arch == 'resnet50':
             from models.resnet import resnet50
-            net = resnet50()
+            net = resnet50(num_classes=num_class)
         elif args.arch == 'resnet101':
             from models.resnet import resnet101
             net = resnet101()

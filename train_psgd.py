@@ -21,6 +21,8 @@ import random
 import resnet
 from utils import get_datasets, get_model
 
+import wandb
+
 def set_seed(seed=233): 
     random.seed(seed)
     np.random.seed(seed)
@@ -129,7 +131,7 @@ def update_param(model, param_vec):
 def main():
 
     global args, best_prec1, Bk, p0, P
-
+    wandb.init(project=f"l2o_lora", entity="xxchen", name="resnet_baseline")
     # Check the save_dir exists or not
     print (args.save_dir)
     if not os.path.exists(args.save_dir):
@@ -160,6 +162,7 @@ def main():
 
     P = torch.from_numpy(P).cuda()
 
+    torch.save(P, f'{args.arch}_{args.datasets}_P.pth.tar')
     # Resume from params_start
     model.load_state_dict(torch.load(os.path.join(args.save_dir,  str(args.params_start) +  '.pt')))
 
@@ -193,7 +196,8 @@ def main():
 
         # Evaluate on validation set
         prec1 = validate(val_loader, model, criterion)
-
+        #wandb.log({"meta_eval/avg_val_loss": valid_loss}, step=(epoch + 1) * len(train_loader))
+        wandb.log({"meta_eval/avg_accuracy": prec1}, step=(epoch + 1) * len(train_loader))
         # Remember best prec@1 and save checkpoint
         is_best = prec1 > best_prec1
         best_prec1 = max(prec1, best_prec1)
@@ -239,7 +243,7 @@ def train(train_loader, model, criterion, optimizer, epoch):
         # Compute output
         output = model(input_var)
         loss = criterion(output, target_var)
-
+        wandb.log({"meta_eval/train_loss": loss}, step=(epoch) * len(train_loader) + i)
         # Compute gradient and do SGD step
         optimizer.zero_grad()
         loss.backward()

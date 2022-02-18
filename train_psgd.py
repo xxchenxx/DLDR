@@ -85,6 +85,9 @@ parser.add_argument('--corrupt', default=0, type=float,
 parser.add_argument('--smalldatasets', default=None, type=float, dest='smalldatasets', 
                     help='percent of small datasets')
 
+parser.add_argument('--momentum', default=0.0, type=float) 
+
+ 
 args = parser.parse_args()
 set_seed(args.randomseed)
 best_prec1 = 0
@@ -131,7 +134,7 @@ def update_param(model, param_vec):
 def main():
 
     global args, best_prec1, Bk, p0, P
-    wandb.init(project=f"l2o_lora", entity="xxchen", name="resnet_baseline")
+    wandb.init(project=f"l2o_lora", entity="xxchen", name=f"{args.arch}_{args.datasets}_baseline")
     # Check the save_dir exists or not
     print (args.save_dir)
     if not os.path.exists(args.save_dir):
@@ -159,10 +162,12 @@ def main():
     P = np.array(pca.components_)
     print ('ratio:', pca.explained_variance_ratio_)
     print ('P:', P.shape)
-
+    
     P = torch.from_numpy(P).cuda()
 
     torch.save(P, f'{args.arch}_{args.datasets}_P.pth.tar')
+    #P = torch.load(f'{args.arch}_{args.datasets}_P.pth.tar')
+
     # Resume from params_start
     model.load_state_dict(torch.load(os.path.join(args.save_dir,  str(args.params_start) +  '.pt')))
 
@@ -175,9 +180,9 @@ def main():
         model.half()
         criterion.half()
 
-    cudnn.benchmark = True
+    cudnn.benchmark = False
 
-    optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=0.9)
+    optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum)
     lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer,
                                                         milestones=[30, 50], last_epoch=args.start_epoch - 1)
 
@@ -229,7 +234,6 @@ def train(train_loader, model, criterion, optimizer, epoch):
 
     end = time.time()
     for i, (input, target) in enumerate(train_loader):
-
         # Measure data loading time
         data_time.update(time.time() - end)
 
@@ -243,11 +247,11 @@ def train(train_loader, model, criterion, optimizer, epoch):
         # Compute output
         output = model(input_var)
         loss = criterion(output, target_var)
+    
         wandb.log({"meta_eval/train_loss": loss}, step=(epoch) * len(train_loader) + i)
         # Compute gradient and do SGD step
         optimizer.zero_grad()
         loss.backward()
-
         # Do P_plus_BFGS update
         gk = get_model_grad_vec(model)
         P_SGD(model, optimizer, gk, loss.item(), input_var, target_var)

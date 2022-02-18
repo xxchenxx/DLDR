@@ -306,7 +306,7 @@ def get_model(args):
     else:
         num_class = 1000
     
-    if args.pretrained and args.datasets == 'ImageNet':
+    if args.datasets == 'ImageNet':
         print("USE OFFICIAL")
             
         model = models_imagenet.__dict__[args.arch](pretrained=args.pretrained)
@@ -315,7 +315,7 @@ def get_model(args):
             model.fc = nn.Linear(model.fc.weight.shape[1], num_class, bias=True)
         return model
     
-    if args.datasets == 'CIFAR100' or args.datasets == 'CIFAR10':
+    elif args.datasets == 'CIFAR100' or args.datasets == 'CIFAR10':
         if args.arch == 'vgg16':
             from models.vgg import vgg16_bn
             net = vgg16_bn()

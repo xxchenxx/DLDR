@@ -23,16 +23,26 @@ class VGG(nn.Module):
     def __init__(self, features, num_class=100):
         super().__init__()
         self.features = features
-
-        self.classifier = nn.Sequential(
-            nn.Linear(512, 4096),
-            nn.ReLU(inplace=True),
-            nn.Dropout(),
-            nn.Linear(4096, 4096),
-            nn.ReLU(inplace=True),
-            nn.Dropout(),
-            nn.Linear(4096, num_class)
-        )
+        if num_class == 1000:
+            self.classifier = nn.Sequential(
+                nn.Linear(25088, 4096),
+                nn.ReLU(inplace=True),
+                nn.Dropout(),
+                nn.Linear(4096, 4096),
+                nn.ReLU(inplace=True),
+                nn.Dropout(),
+                nn.Linear(4096, num_class)
+            )
+        else:
+            self.classifier = nn.Sequential(
+                nn.Linear(512, 4096),
+                nn.ReLU(inplace=True),
+                nn.Dropout(),
+                nn.Linear(4096, 4096),
+                nn.ReLU(inplace=True),
+                nn.Dropout(),
+                nn.Linear(4096, num_class)
+            )
 
     def forward(self, x):
         output = self.features(x)
@@ -66,8 +76,8 @@ def vgg11_bn():
 def vgg13_bn():
     return VGG(make_layers(cfg['B'], batch_norm=True))
 
-def vgg16_bn():
-    return VGG(make_layers(cfg['D'], batch_norm=True))
+def vgg16_bn(num_classes):
+    return VGG(make_layers(cfg['D'], batch_norm=True),num_class=num_classes)
 
 def vgg19_bn():
     return VGG(make_layers(cfg['E'], batch_norm=True))

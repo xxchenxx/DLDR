@@ -81,6 +81,7 @@ test_loss = []
 test_err = []
 arr_time = []
 
+import wandb
 def main():
 
     global args, best_prec1
@@ -89,7 +90,7 @@ def main():
     args = parser.parse_args()
     
     set_seed(args.randomseed)
-
+    wandb.init(project=f"l2o_lora", entity="xxchen", name=f"{args.arch}_{args.datasets}_baseline_full")
 
     # Check the save_dir exists or not
     print (args.save_dir)
@@ -187,6 +188,7 @@ def main():
                 'state_dict': model.state_dict(),
                 'best_prec1': best_prec1,
             }, is_best, filename=os.path.join(args.save_dir, 'checkpoint_refine_' + str(epoch+1) + '.th'))
+        wandb.log({"meta_eval/avg_accuracy": prec1}, step=(epoch + 1) * len(train_loader))
 
         save_checkpoint({
             'state_dict': model.state_dict(),
@@ -243,7 +245,7 @@ def train(train_loader, model, criterion, optimizer, epoch):
         # compute output
         output = model(input_var)
         loss = criterion(output, target_var)
-
+        wandb.log({"meta_eval/train_loss": loss}, step=(epoch) * len(train_loader) + i)
         # compute gradient and do SGD step
         optimizer.zero_grad()
         loss.backward()

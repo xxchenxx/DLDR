@@ -134,7 +134,7 @@ def update_param(model, param_vec):
 def main():
 
     global args, best_prec1, Bk, p0, P
-    wandb.init(project=f"l2o_lora", entity="xxchen", name=f"{args.arch}_{args.datasets}_baseline")
+    wandb.init(project=f"l2o_lora", entity="xxchen", name=f"{args.arch}_{args.datasets}_baseline_{args.randomseed}")
     # Check the save_dir exists or not
     print (args.save_dir)
     if not os.path.exists(args.save_dir):
@@ -145,31 +145,41 @@ def main():
     model.cuda()
 
     # Load sampled model parameters
-    print ('params: from', args.params_start, 'to', args.params_end)
-    W = []
-    for i in range(args.params_start, args.params_end):
-        ############################################################################
-        # if i % 2 != 0: continue
+    print(os.path.exists(f'{args.arch}_{args.datasets}_P.pth.tar'))
+    if not os.path.exists(f'{args.arch}_{args.datasets}_P.pth.tar'):
+        print ('params: from', args.params_start, 'to', args.params_end)
+        W = []
+        for i in range(args.params_start, args.params_end):
+            ############################################################################
+            # if i % 2 != 0: continue
+            try:
+                model.load_state_dict(torch.load(os.path.join(args.save_dir,  str(i) +  '.pt')))
+            except:
+                model.module.load_state_dict(torch.load(os.path.join(args.save_dir,  str(i) +  '.pt')))
 
-        model.load_state_dict(torch.load(os.path.join(args.save_dir,  str(i) +  '.pt')))
-        W.append(get_model_param_vec(model))
-    W = np.array(W)
-    print ('W:', W.shape)
+            W.append(get_model_param_vec(model))
+        W = np.array(W)
+        print ('W:', W.shape)
 
-    # Obtain base variables through PCA
-    pca = PCA(n_components=args.n_components)
-    pca.fit_transform(W)
-    P = np.array(pca.components_)
-    print ('ratio:', pca.explained_variance_ratio_)
-    print ('P:', P.shape)
-    
-    P = torch.from_numpy(P).cuda()
+        # Obtain base variables through PCA
+        pca = PCA(n_components=args.n_components)
+        pca.fit_transform(W)
+        P = np.array(pca.components_)
+        print ('ratio:', pca.explained_variance_ratio_)
+        print ('P:', P.shape)
 
-    torch.save(P, f'{args.arch}_{args.datasets}_P.pth.tar')
-    #P = torch.load(f'{args.arch}_{args.datasets}_P.pth.tar')
+        P = torch.from_numpy(P).cuda()
+
+        torch.save(P, f'{args.arch}_{args.datasets}_P.pth.tar')
+    else:
+        P = torch.load(f'{args.arch}_{args.datasets}_P.pth.tar')
 
     # Resume from params_start
-    model.load_state_dict(torch.load(os.path.join(args.save_dir,  str(args.params_start) +  '.pt')))
+    try:
+        model.load_state_dict(torch.load(os.path.join(args.save_dir,  str(args.params_start) +  '.pt')))
+    except:
+        model.module.load_state_dict(torch.load(os.path.join(args.save_dir,  str(args.params_start) +  '.pt')))
+
 
     # Prepare Dataloader
     train_loader, val_loader = get_datasets(args)
@@ -181,7 +191,7 @@ def main():
         criterion.half()
 
     cudnn.benchmark = False
-
+    
     optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum)
     lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer,
                                                         milestones=[30, 50], last_epoch=args.start_epoch - 1)

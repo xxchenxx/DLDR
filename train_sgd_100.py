@@ -6,6 +6,7 @@ import numpy as np
 import pickle
 import random
 
+import wandb 
 import torch
 import torch.nn as nn
 import torch.nn.parallel
@@ -63,7 +64,7 @@ parser.add_argument('--corrupt', default=0, type=float,
                     metavar='c', help='noise level for training set')
 parser.add_argument('--smalldatasets', default=None, type=float, dest='smalldatasets', 
                     help='percent of small datasets')
-            
+
 best_prec1 = 0
 
 def set_seed(seed=1): 
@@ -84,11 +85,13 @@ arr_time = []
 def main():
 
     global args, best_prec1
+    
     global param_avg, train_loss, train_err, test_loss, test_err, arr_time
     
     args = parser.parse_args()
-    
+    #wandb.init(project=f"l2o_lora", entity="xxchen", name=f"{args.arch}_{args.datasets}_baseline_full")
     set_seed(args.randomseed)
+    wandb.init(project=f"l2o_lora", entity="xxchen", name=f"{args.arch}_{args.datasets}_baseline_{args.optimizer}_full_{args.randomseed}")
 
 
     # Check the save_dir exists or not
@@ -98,6 +101,14 @@ def main():
 
     # Define model
     model = torch.nn.DataParallel(get_model(args))
+
+    if args.randomseed == 1:
+        torch.save(model.state_dict(), os.path.join(args.save_dir,  str(0) +  '.pt'))
+
+    try:
+        model.load_state_dict(torch.load(os.path.join(args.save_dir,  str(0) +  '.pt')))
+    except:
+        model.module.load_state_dict(torch.load(os.path.join(args.save_dir,  str(0) +  '.pt')))
     model.cuda()
 
     # Optionally resume from a checkpoint
@@ -135,14 +146,9 @@ def main():
         optimizer = torch.optim.Adam(model.parameters(), lr=0.001, weight_decay=args.weight_decay)
     
     ##################################################################################################
-    
-    if args.datasets == 'CIFAR10':
-        lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer,
-                                                            milestones=[30, 50], last_epoch=args.start_epoch - 1)
-                                                            
-    elif args.datasets == 'CIFAR100':
-        lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer,
-                                                            milestones=[150], last_epoch=args.start_epoch - 1)
+                                                              
+    lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer,
+                                                            milestones=[50, 75], last_epoch=args.start_epoch - 1)
 
     if args.arch in ['resnet1202', 'resnet110']:
         # for resnet1202 original paper uses lr=0.01 for first 400 minibatches for warm-up
@@ -156,12 +162,6 @@ def main():
         return
 
     is_best = 0
-    save_checkpoint({
-        'epoch': 0,
-        'state_dict': model.state_dict(),
-        'best_prec1': best_prec1,
-    }, is_best, filename=os.path.join(args.save_dir, 'checkpoint_refine_' + str(0) + '.th'))
-
     print ('Start training: ', args.start_epoch, '->', args.epochs)
 
     # DLDR sampling
@@ -181,20 +181,10 @@ def main():
         is_best = prec1 > best_prec1
         best_prec1 = max(prec1, best_prec1)
 
+        wandb.log({"meta_eval/avg_accuracy": prec1}, step=(epoch + 1) * len(train_loader))
+
         if epoch > 0 and epoch % args.save_every == 0 or epoch == args.epochs - 1:
-            save_checkpoint({
-                'epoch': epoch + 1,
-                'state_dict': model.state_dict(),
-                'best_prec1': best_prec1,
-            }, is_best, filename=os.path.join(args.save_dir, 'checkpoint_refine_' + str(epoch+1) + '.th'))
-
-        save_checkpoint({
-            'state_dict': model.state_dict(),
-            'best_prec1': best_prec1,
-        }, is_best, filename=os.path.join(args.save_dir, 'model.th'))
-
-        # DLDR sampling
-        torch.save(model.state_dict(), os.path.join(args.save_dir,  str(epoch + 1) +  '.pt'))
+            pass
 
     print ('train loss: ', train_loss)
     print ('train err: ', train_err)
@@ -202,6 +192,8 @@ def main():
     print ('test err: ', test_err)
 
     print ('time: ', arr_time)
+
+    print(best_prec1)
 
 
 def get_model_param_vec(model):
@@ -243,7 +235,7 @@ def train(train_loader, model, criterion, optimizer, epoch):
         # compute output
         output = model(input_var)
         loss = criterion(output, target_var)
-
+    
         # compute gradient and do SGD step
         optimizer.zero_grad()
         loss.backward()
@@ -253,7 +245,8 @@ def train(train_loader, model, criterion, optimizer, epoch):
         optimizer.step()
         output = output.float()
         loss = loss.float()
-
+        
+        wandb.log({"meta_eval/train_loss": loss.item()}, step=(epoch) * len(train_loader) + i)
         # measure accuracy and record loss
         prec1 = accuracy(output.data, target)[0]
         losses.update(loss.item(), input.size(0))

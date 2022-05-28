@@ -266,8 +266,8 @@ def get_datasets(args):
             num_workers=args.workers, pin_memory=True)
 
     elif args.datasets == 'ImageNet':
-        traindir = os.path.join('/home/datasets/ILSVRC2012/', 'train')
-        valdir = os.path.join('/home/datasets/ILSVRC2012/', 'val')
+        traindir = os.path.join('/ssd1/xinyu/dataset/imagenet2012', 'train')
+        valdir = os.path.join('/ssd1/xinyu/dataset/imagenet2012', 'val')
         normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                         std=[0.229, 0.224, 0.225])
 
@@ -306,19 +306,24 @@ def get_model(args):
     else:
         num_class = 1000
     
+    print(args.datasets)
     if args.datasets == 'ImageNet':
         print("USE OFFICIAL")
-            
-        model = models_imagenet.__dict__[args.arch](pretrained=args.pretrained)
-        if num_class < 1000:
-            old_fc = model.fc
-            model.fc = nn.Linear(model.fc.weight.shape[1], num_class, bias=True)
-        return model
+        if args.arch != 'vgg16':
+            model = models_imagenet.__dict__[args.arch]()
+            if num_class < 1000:
+                old_fc = model.fc
+                model.fc = nn.Linear(model.fc.weight.shape[1], num_class, bias=True)
+            return model
+        else:
+            from models.vgg import vgg16_bn
+            model = vgg16_bn(num_classes=1000)
+            return model
     
     elif args.datasets == 'CIFAR100' or args.datasets == 'CIFAR10':
         if args.arch == 'vgg16':
             from models.vgg import vgg16_bn
-            net = vgg16_bn()
+            net = vgg16_bn(num_classes=num_class)
         elif args.arch == 'vgg13':
             from models.vgg import vgg13_bn
             net = vgg13_bn()
@@ -408,7 +413,7 @@ def get_model(args):
             net = mobilenet()
         elif args.arch == 'mobilenetv2':
             from models.mobilenetv2 import mobilenetv2
-            net = mobilenetv2()
+            net = mobilenetv2(num_class=num_class)
         elif args.arch == 'nasnet':
             from models.nasnet import nasnet
             net = nasnet()
